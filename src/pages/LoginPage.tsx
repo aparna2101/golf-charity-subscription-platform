@@ -1,0 +1,88 @@
+import { PublicLayout } from "@/components/PublicLayout";
+import { Button } from "@/components/ui/button";
+import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+
+export default function LoginPage() {
+  const [showPw, setShowPw] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await login(email, password);
+      toast({ title: "Welcome back!", description: "You've been signed in successfully." });
+      navigate("/dashboard");
+    } catch (err: any) {
+      if (err.message.includes("verify your email")) {
+        toast({ title: "Verification needed", description: "Please verify your email to continue." });
+        // Optionally navigate to signup with a flag to show OTP step
+        navigate("/signup", { state: { email, step: 'otp' } });
+      } else {
+        toast({ title: "Login failed", description: err.message, variant: "destructive" });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <PublicLayout>
+      <section className="flex min-h-[80vh] items-center justify-center bg-gradient-hero px-4 py-16">
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="rounded-2xl border border-border bg-card p-8 shadow-elevated sm:p-10">
+            <div className="mb-8 text-center">
+              <h1 className="font-display text-2xl font-bold text-foreground">Welcome Back</h1>
+              <p className="mt-2 text-sm text-muted-foreground">Sign in to your Score for Good account</p>
+            </div>
+
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+                  placeholder="you@example.com"
+                  className="h-11 w-full rounded-lg border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Password</label>
+                <div className="relative">
+                  <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} required
+                    placeholder="••••••••"
+                    className="h-11 w-full rounded-lg border border-border bg-background px-4 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input type="checkbox" className="rounded border-border" />
+                  Remember me
+                </label>
+                <a href="#" className="text-sm font-medium text-primary hover:underline">Forgot password?</a>
+              </div>
+              <Button variant="hero" className="w-full" size="lg" type="submit" disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Sign In
+              </Button>
+            </form>
+
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <Link to="/signup" className="font-medium text-primary hover:underline">Sign up</Link>
+            </p>
+          </div>
+        </div>
+      </section>
+    </PublicLayout>
+  );
+}
