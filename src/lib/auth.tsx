@@ -4,12 +4,11 @@ import { api } from './api';
 interface User {
   id: number;
   email: string;
-  first_name: string;
-  last_name: string;
-  role: 'subscriber' | 'admin';
+  name: string;
+  role: 'user' | 'admin';
   charity_id: number | null;
   charity_contribution_pct: number;
-  avatar_url: string | null;
+  status?: string;
 }
 
 interface AuthContextType {

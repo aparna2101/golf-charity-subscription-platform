@@ -85,12 +85,12 @@ export default function AdminDrawsPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Prize Pool (₹)</label>
-              <input type="number" value={prizePool} onChange={e => setPrizePool(e.target.value)} placeholder="Auto-calculated from subscriptions"
+              <input type="number" value={prizePool} onChange={e => setPrizePool(e.target.value)} placeholder="Enter actual prize pool"
                 className="h-10 w-full rounded-lg border border-border bg-background px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Draw logic: Random generation (lottery-style). Prize pool is auto-calculated from active subscriber count if left empty.
+            Draw logic: winners are generated from active members who have submitted scores. Use the real prize pool value for this draw.
           </p>
           <div className="mt-4 flex gap-3">
             <Button variant="hero" onClick={() => createMutation.mutate({ draw_date: drawDate, prize_pool: prizePool ? parseFloat(prizePool) : undefined })} disabled={!drawDate || createMutation.isPending}>

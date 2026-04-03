@@ -1,7 +1,7 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Heart, MapPin, Percent, Gift } from "lucide-react";
+import { Heart, MapPin, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -9,12 +9,17 @@ import { api } from "@/lib/api";
 export default function MyCharityPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [showDonate, setShowDonate] = useState(false);
-  const [donationAmount, setDonationAmount] = useState("");
+  const [contributionPct, setContributionPct] = useState(10);
+  const [selectedCharityId, setSelectedCharityId] = useState("");
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
     queryFn: () => api.getProfile(),
+  });
+
+  const { data: charities = [] } = useQuery({
+    queryKey: ['public-charities'],
+    queryFn: () => api.getCharities(),
   });
 
   const { data: dashStats } = useQuery({
@@ -22,17 +27,25 @@ export default function MyCharityPage() {
     queryFn: () => api.getUserDashboard(),
   });
 
-  const [contributionPct, setContributionPct] = useState(profile?.charity_contribution_pct || 10);
+  useEffect(() => {
+    if (profile?.charity_contribution_pct !== undefined) {
+      setContributionPct(profile.charity_contribution_pct);
+    }
+    if (profile?.charity_id) {
+      setSelectedCharityId(String(profile.charity_id));
+    }
+  }, [profile]);
 
-  const saveMutation = useMutation({
-    mutationFn: (pct: number) => api.updateProfile({ charity_contribution_pct: pct }),
+  const updateMutation = useMutation({
+    mutationFn: (payload: { charity_id?: number; charity_contribution_pct?: number }) => api.updateProfile(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
-      toast({ title: "Contribution Updated", description: `Your charity contribution is now ${contributionPct}%.` });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast({ title: "Charity settings updated" });
     },
-    onError: (err: any) => {
-      toast({ title: "Update failed", description: err.message, variant: "destructive" });
-    }
+    onError: (error: any) => {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    },
   });
 
   const handleSaveContribution = () => {
@@ -41,19 +54,16 @@ export default function MyCharityPage() {
       setContributionPct(10);
       return;
     }
-    saveMutation.mutate(contributionPct);
+    updateMutation.mutate({ charity_contribution_pct: contributionPct });
   };
 
-  const handleDonate = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amount = parseFloat(donationAmount);
-    if (!amount || amount <= 0) {
-      toast({ title: "Invalid amount", description: "Please enter a valid donation amount.", variant: "destructive" });
+  const handleChangeCharity = () => {
+    if (!selectedCharityId) {
+      toast({ title: "Select a charity", description: "Choose a charity before saving.", variant: "destructive" });
       return;
     }
-    toast({ title: "Donation Submitted", description: `Thank you for your ₹${amount.toFixed(2)} donation!` });
-    setDonationAmount("");
-    setShowDonate(false);
+
+    updateMutation.mutate({ charity_id: Number(selectedCharityId) });
   };
 
   const charityContributed = dashStats?.charityContributed ?? 0;
@@ -73,16 +83,13 @@ export default function MyCharityPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Current Charity */}
         <div className="rounded-2xl border border-border bg-card p-8 shadow-soft">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="mb-4 flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold-light">
               <Heart className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h3 className="font-display text-lg font-semibold text-foreground">
-                {profile?.charity_name || 'No Charity Selected'}
-              </h3>
+              <h3 className="font-display text-lg font-semibold text-foreground">{profile?.charity_name || 'No Charity Selected'}</h3>
               {profile?.charity_location && (
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                   <MapPin className="h-3 w-3" /> {profile.charity_location}
@@ -91,14 +98,11 @@ export default function MyCharityPage() {
             </div>
           </div>
           {profile?.charity_description && (
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {profile.charity_description}
-            </p>
+            <p className="text-sm leading-relaxed text-muted-foreground">{profile.charity_description}</p>
           )}
 
-          {/* Adjustable Contribution */}
           <div className="mt-6 rounded-xl bg-secondary/50 p-4">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="mb-3 flex items-center gap-2">
               <Percent className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-semibold text-foreground">Contribution Rate</span>
             </div>
@@ -109,34 +113,39 @@ export default function MyCharityPage() {
                 max="50"
                 step="5"
                 value={contributionPct}
-                onChange={(e) => setContributionPct(Number(e.target.value))}
+                onChange={(event) => setContributionPct(Number(event.target.value))}
                 className="flex-1 accent-primary"
               />
-              <span className="font-display text-lg font-bold text-primary w-14 text-right">{contributionPct}%</span>
+              <span className="w-14 text-right font-display text-lg font-bold text-primary">{contributionPct}%</span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Minimum 10% · Drag to increase your contribution</p>
-            <Button variant="default" size="sm" className="mt-3" onClick={handleSaveContribution} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? 'Saving...' : 'Save Contribution'}
+            <p className="mt-1 text-xs text-muted-foreground">Minimum 10% · Increase your contribution anytime.</p>
+            <Button variant="default" size="sm" className="mt-3" onClick={handleSaveContribution} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? 'Saving...' : 'Save Contribution'}
             </Button>
           </div>
 
           <div className="mt-4 rounded-xl bg-secondary/50 p-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total contributed</span>
-              <span className="font-semibold text-primary">₹{charityContributed.toLocaleString('en-IN')}</span>
-            </div>
+            <p className="mb-2 text-sm font-semibold text-foreground">Change Charity</p>
+            <select
+              value={selectedCharityId}
+              onChange={(event) => setSelectedCharityId(event.target.value)}
+              className="h-11 w-full rounded-lg border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Select charity</option>
+              {charities.map((charity: any) => (
+                <option key={charity.id} value={charity.id}>{charity.name}</option>
+              ))}
+            </select>
+            <Button variant="outline" className="mt-3" onClick={handleChangeCharity} disabled={updateMutation.isPending || !selectedCharityId}>
+              Save Charity
+            </Button>
           </div>
-
-          <Button variant="outline" className="mt-4">Change Charity</Button>
         </div>
 
-        {/* Impact + Independent Donation */}
         <div className="space-y-6">
           <div className="rounded-2xl border border-border bg-gradient-warm p-8">
             <h3 className="font-display text-lg font-semibold text-foreground">Your Impact</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Your contributions help fund programs and support the charity you care about.
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">Your subscription contributions are calculated from real paid transactions.</p>
             <div className="mt-6 space-y-3">
               <div className="rounded-xl bg-card/80 p-3">
                 <p className="text-sm font-semibold text-foreground">₹{charityContributed.toLocaleString('en-IN')} donated</p>
@@ -144,44 +153,16 @@ export default function MyCharityPage() {
               </div>
               <div className="rounded-xl bg-card/80 p-3">
                 <p className="text-sm font-semibold text-foreground">{monthsActive} month{monthsActive !== 1 ? 's' : ''} active</p>
-                <p className="text-xs text-muted-foreground">
-                  {monthsActive >= 6 ? 'Consistent supporter' : 'Growing supporter'}
-                </p>
+                <p className="text-xs text-muted-foreground">{monthsActive >= 6 ? 'Consistent supporter' : 'Growing supporter'}</p>
               </div>
             </div>
           </div>
 
-          {/* Independent Donation */}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-            <div className="flex items-center gap-2 mb-2">
-              <Gift className="h-5 w-5 text-primary" />
-              <h3 className="font-display text-lg font-semibold text-foreground">Make a Donation</h3>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Send an independent one-off donation to your chosen charity — not tied to gameplay.
+            <h3 className="font-display text-lg font-semibold text-foreground">How Contributions Work</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Every paid subscription allocates your selected percentage to the charity on your profile. Admin charity totals and the public frontend both reflect the same database values.
             </p>
-            {!showDonate ? (
-              <Button variant="hero" onClick={() => setShowDonate(true)}>Donate Now</Button>
-            ) : (
-              <form onSubmit={handleDonate} className="space-y-3 animate-fade-in">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-foreground">Amount (₹)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    placeholder="e.g. 500"
-                    value={donationAmount}
-                    onChange={(e) => setDonationAmount(e.target.value)}
-                    className="h-11 w-full rounded-lg border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <Button variant="hero" type="submit">Confirm Donation</Button>
-                  <Button variant="ghost" type="button" onClick={() => setShowDonate(false)}>Cancel</Button>
-                </div>
-              </form>
-            )}
           </div>
         </div>
       </div>

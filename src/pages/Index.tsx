@@ -2,7 +2,7 @@ import { PublicLayout } from "@/components/PublicLayout";
 import { SectionHeading } from "@/components/SectionHeading";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Heart, Trophy, Users, Star, ArrowRight, Gift, Target, Shield } from "lucide-react";
+import { Heart, Trophy, Users, ArrowRight, Gift, Target, Shield } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
@@ -14,9 +14,9 @@ const features = [
 ];
 
 export default function HomePage() {
-  const { data: adminStats } = useQuery({
+  const { data: publicStats } = useQuery({
     queryKey: ['public-stats'],
-    queryFn: () => api.getAdminStats().catch(() => null),
+    queryFn: () => api.getPublicStats().catch(() => null),
     retry: false,
   });
 
@@ -26,13 +26,20 @@ export default function HomePage() {
     retry: false,
   });
 
-  const featuredCharity = allCharities.length > 0 ? allCharities[0] : null;
+  const adminStats = publicStats;
+  const featuredCharity = allCharities.find((charity: any) => charity.featured) || allCharities[0] || null;
+  const nextDrawPool = Number(publicStats?.nextDraw?.prize_pool || 0);
+  const prizeHighlights = [
+    { match: "5 Numbers", share: 0.4, color: "bg-gradient-gold text-primary-foreground" },
+    { match: "4 Numbers", share: 0.35, color: "bg-secondary text-secondary-foreground" },
+    { match: "3 Numbers", share: 0.25, color: "bg-champagne text-foreground" },
+  ];
 
   const stats = [
     { value: adminStats ? `₹${(adminStats.charityTotal || 0).toLocaleString('en-IN')}` : '₹0', label: "Raised for Charity" },
-    { value: adminStats ? (adminStats.activeSubscribers || 0).toLocaleString('en-IN') : '0', label: "Active Members" },
+    { value: publicStats ? (publicStats.activeSubscribers || 0).toLocaleString('en-IN') : '0', label: "Active Members" },
     { value: adminStats ? `₹${(adminStats.totalPool || 0).toLocaleString('en-IN')}` : '₹0', label: "Prize Pool" },
-    { value: adminStats ? (adminStats.totalUsers || 0).toLocaleString('en-IN') : '0', label: "Registered Users" },
+    { value: publicStats ? (publicStats.totalUsers || 0).toLocaleString('en-IN') : '0', label: "Registered Users" },
   ];
 
   return (
@@ -135,18 +142,18 @@ export default function HomePage() {
       <section className="container mx-auto px-4 py-20 lg:px-8">
         <SectionHeading badge="Rewards" title="Prize Draw Highlights" subtitle="Match numbers for incredible prizes — jackpots roll over when unclaimed!" />
         <div className="grid gap-6 sm:grid-cols-3">
-          {[
-            { match: "5 Numbers", prize: "₹10,00,000", color: "bg-gradient-gold text-primary-foreground" },
-            { match: "4 Numbers", prize: "₹2,50,000", color: "bg-secondary text-secondary-foreground" },
-            { match: "3 Numbers", prize: "₹25,000", color: "bg-champagne text-foreground" },
-          ].map((d) => (
+          {prizeHighlights.map((d) => (
             <div key={d.match} className="rounded-2xl border border-border p-8 text-center shadow-soft transition-all hover:shadow-elevated hover:-translate-y-1">
               <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${d.color}`}>
                 <Trophy className="h-7 w-7" />
               </div>
               <h3 className="font-display text-lg font-semibold">{d.match}</h3>
-              <p className="mt-2 font-display text-3xl font-bold text-primary">{d.prize}</p>
-              <p className="mt-2 text-xs text-muted-foreground">Per monthly draw</p>
+              <p className="mt-2 font-display text-3xl font-bold text-primary">
+                {nextDrawPool > 0 ? `₹${Math.round(nextDrawPool * d.share).toLocaleString('en-IN')}` : `${Math.round(d.share * 100)}%`}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {nextDrawPool > 0 ? 'From the current scheduled draw pool' : 'Share of the active draw pool'}
+              </p>
             </div>
           ))}
         </div>

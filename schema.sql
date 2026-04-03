@@ -1,6 +1,19 @@
 CREATE DATABASE IF NOT EXISTS golf_charity_subscription_platform;
 USE golf_charity_subscription_platform;
 
+CREATE TABLE IF NOT EXISTS charities (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  members INT DEFAULT 0,
+  contributions DECIMAL(10, 2) DEFAULT 0.00,
+  status ENUM('Active', 'Inactive') DEFAULT 'Active',
+  description TEXT,
+  category VARCHAR(100) DEFAULT 'Community',
+  location VARCHAR(255),
+  image_url VARCHAR(255),
+  is_featured BOOLEAN DEFAULT FALSE
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
@@ -14,18 +27,6 @@ CREATE TABLE IF NOT EXISTS users (
   otp_code VARCHAR(10),
   otp_expiry DATETIME,
   joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS charities (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  members INT DEFAULT 0,
-  contributions DECIMAL(10, 2) DEFAULT 0.00,
-  status ENUM('Active', 'Inactive') DEFAULT 'Active',
-  description TEXT,
-  category VARCHAR(100) DEFAULT 'Community',
-  location VARCHAR(255),
-  image_url VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS scores (
@@ -52,7 +53,7 @@ CREATE TABLE IF NOT EXISTS winners (
   user_id INT NOT NULL,
   match_type ENUM('3-Number', '4-Number', '5-Number'),
   prize_amount DECIMAL(10, 2),
-  status ENUM('Pending', 'Verified', 'Paid') DEFAULT 'Pending',
+  status ENUM('Pending', 'Verified', 'Paid', 'Rejected') DEFAULT 'Pending',
   proof_url VARCHAR(255),
   FOREIGN KEY (draw_id) REFERENCES draws(id),
   FOREIGN KEY (user_id) REFERENCES users(id)
@@ -87,16 +88,12 @@ CREATE TABLE IF NOT EXISTS payments (
   FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
 );
 
--- Add columns if they don't exist (for existing databases)
--- ALTER TABLE users ADD COLUMN IF NOT EXISTS role ENUM('user', 'admin') DEFAULT 'user';
--- ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code VARCHAR(10);
--- ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expiry DATETIME;
--- ALTER TABLE users ADD COLUMN IF NOT EXISTS charity_contribution_pct INT DEFAULT 10;
--- ALTER TABLE charities ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Community';
--- ALTER TABLE charities ADD COLUMN IF NOT EXISTS location VARCHAR(255);
-
-INSERT INTO charities (name, members, contributions, status, description, category, location) VALUES 
-('Hope Through Sport Foundation', 2340, 234000.00, 'Active', 'Empowering disadvantaged youth through sport programs across the UK.', 'Sport', 'London, UK'),
-('GreenFairway Trust', 1820, 156000.00, 'Active', 'Restoring natural habitats and wildlife corridors along UK golf courses.', 'Environment', 'Edinburgh, UK'),
-('Junior Swing Academy', 1540, 128000.00, 'Active', 'Providing free golf coaching and mentorship for underprivileged children.', 'Youth', 'Manchester, UK')
-ON DUPLICATE KEY UPDATE name=name;
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_id INT PRIMARY KEY,
+  draw_results BOOLEAN DEFAULT TRUE,
+  winner_alerts BOOLEAN DEFAULT TRUE,
+  charity_updates BOOLEAN DEFAULT FALSE,
+  newsletter BOOLEAN DEFAULT TRUE,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

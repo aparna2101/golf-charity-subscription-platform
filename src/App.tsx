@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { AuthProvider } from "@/lib/auth";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import type { ReactNode } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -35,6 +36,30 @@ import AdminReportsPage from "./pages/admin/AdminReportsPage";
 
 const queryClient = new QueryClient();
 
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { loading, isAuthenticated } = useAuth();
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading...</div>;
+  }
+
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
+
+function AdminRoute({ children }: { children: ReactNode }) {
+  const { loading, isAuthenticated, isAdmin } = useAuth();
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return isAdmin ? children : <Navigate to="/dashboard" replace />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -53,28 +78,28 @@ const App = () => (
           <Route path="/signup" element={<SignupPage />} />
 
           {/* User Dashboard */}
-          <Route path="/dashboard" element={<DashboardOverview />} />
-          <Route path="/dashboard/scores" element={<ScoresPage />} />
-          <Route path="/dashboard/draws" element={<DrawsPage />} />
-          <Route path="/dashboard/charity" element={<MyCharityPage />} />
-          <Route path="/dashboard/payments" element={<PaymentsPage />} />
-          <Route path="/dashboard/winner" element={<WinnerProofPage />} />
-          <Route path="/dashboard/settings" element={<SettingsPage />} />
-          <Route path="/dashboard/notifications" element={<NotificationsPage />} />
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardOverview /></ProtectedRoute>} />
+          <Route path="/dashboard/scores" element={<ProtectedRoute><ScoresPage /></ProtectedRoute>} />
+          <Route path="/dashboard/draws" element={<ProtectedRoute><DrawsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/charity" element={<ProtectedRoute><MyCharityPage /></ProtectedRoute>} />
+          <Route path="/dashboard/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/winner" element={<ProtectedRoute><WinnerProofPage /></ProtectedRoute>} />
+          <Route path="/dashboard/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
           {/* Admin */}
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/users" element={<AdminUsersPage />} />
-          <Route path="/admin/subscriptions" element={<AdminSubscriptionsPage />} />
-          <Route path="/admin/scores" element={<AdminScoresPage />} />
-          <Route path="/admin/draws" element={<AdminDrawsPage />} />
-          <Route path="/admin/simulate" element={<AdminSimulatePage />} />
-          <Route path="/admin/publish" element={<AdminPublishPage />} />
-          <Route path="/admin/charities" element={<AdminCharitiesPage />} />
-          <Route path="/admin/winners" element={<AdminWinnersPage />} />
-          <Route path="/admin/proofs" element={<AdminProofsPage />} />
-          <Route path="/admin/payouts" element={<AdminPayoutsPage />} />
-          <Route path="/admin/reports" element={<AdminReportsPage />} />
+          <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+          <Route path="/admin/subscriptions" element={<AdminRoute><AdminSubscriptionsPage /></AdminRoute>} />
+          <Route path="/admin/scores" element={<AdminRoute><AdminScoresPage /></AdminRoute>} />
+          <Route path="/admin/draws" element={<AdminRoute><AdminDrawsPage /></AdminRoute>} />
+          <Route path="/admin/simulate" element={<AdminRoute><AdminSimulatePage /></AdminRoute>} />
+          <Route path="/admin/publish" element={<AdminRoute><AdminPublishPage /></AdminRoute>} />
+          <Route path="/admin/charities" element={<AdminRoute><AdminCharitiesPage /></AdminRoute>} />
+          <Route path="/admin/winners" element={<AdminRoute><AdminWinnersPage /></AdminRoute>} />
+          <Route path="/admin/proofs" element={<AdminRoute><AdminProofsPage /></AdminRoute>} />
+          <Route path="/admin/payouts" element={<AdminRoute><AdminPayoutsPage /></AdminRoute>} />
+          <Route path="/admin/reports" element={<AdminRoute><AdminReportsPage /></AdminRoute>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

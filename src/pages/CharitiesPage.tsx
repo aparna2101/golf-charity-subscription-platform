@@ -7,8 +7,6 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
-const categories = ["All", "Youth", "Health", "Education", "Environment", "Community", "Sport"];
-
 export default function CharitiesPage() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -17,6 +15,8 @@ export default function CharitiesPage() {
     queryKey: ['public-charities'],
     queryFn: () => api.getCharities(),
   });
+
+  const categories = ["All", ...Array.from(new Set(charities.map((charity: any) => charity.category).filter(Boolean)))];
 
   const filtered = charities.filter((c: any) => {
     const matchesSearch = c.name?.toLowerCase().includes(search.toLowerCase());

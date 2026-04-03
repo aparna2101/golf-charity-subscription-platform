@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function AdminCharitiesPage() {
   const [showAdd, setShowAdd] = useState(false);
-  const [newCharity, setNewCharity] = useState({ name: '', description: '', category: '', location: '' });
+  const [newCharity, setNewCharity] = useState({ name: '', description: '', category: '', location: '', featured: false });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const { toast } = useToast();
@@ -16,16 +16,17 @@ export default function AdminCharitiesPage() {
 
   const { data: charities = [], isLoading } = useQuery({
     queryKey: ['admin-charities'],
-    queryFn: () => api.getCharities(),
+    queryFn: () => api.getCharities({ includeInactive: true }),
   });
 
   const addMutation = useMutation({
     mutationFn: (data: any) => api.adminAddCharity(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-charities'] });
+      queryClient.invalidateQueries({ queryKey: ['public-charities'] });
       toast({ title: "Charity added" });
       setShowAdd(false);
-      setNewCharity({ name: '', description: '', category: '', location: '' });
+      setNewCharity({ name: '', description: '', category: '', location: '', featured: false });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
@@ -34,6 +35,7 @@ export default function AdminCharitiesPage() {
     mutationFn: ({ id, data }: { id: number; data: any }) => api.adminUpdateCharity(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-charities'] });
+      queryClient.invalidateQueries({ queryKey: ['public-charities'] });
       toast({ title: "Charity updated" });
       setEditingId(null);
     },
@@ -43,6 +45,7 @@ export default function AdminCharitiesPage() {
     mutationFn: (id: number) => api.adminDeleteCharity(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-charities'] });
+      queryClient.invalidateQueries({ queryKey: ['public-charities'] });
       toast({ title: "Charity deleted" });
     },
   });
@@ -83,6 +86,14 @@ export default function AdminCharitiesPage() {
               <textarea value={newCharity.description} onChange={e => setNewCharity({ ...newCharity, description: e.target.value })}
                 className="w-full rounded-lg border border-border bg-background p-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring" rows={3} placeholder="Short description" />
             </div>
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={newCharity.featured}
+                onChange={e => setNewCharity({ ...newCharity, featured: e.target.checked })}
+              />
+              Show this charity as featured on the frontend
+            </label>
           </div>
           <div className="mt-4 flex gap-3">
             <Button variant="hero" onClick={() => addMutation.mutate(newCharity)} disabled={!newCharity.name || addMutation.isPending}>
@@ -103,12 +114,13 @@ export default function AdminCharitiesPage() {
               <th className="px-4 py-3 text-left font-semibold text-foreground">Members</th>
               <th className="px-4 py-3 text-left font-semibold text-foreground">Contributions</th>
               <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
+              <th className="px-4 py-3 text-left font-semibold text-foreground">Featured</th>
               <th className="px-4 py-3 text-left font-semibold text-foreground">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {isLoading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Loading charities...</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Loading charities...</td></tr>
             ) : charities.length > 0 ? (
               charities.map((c: any) => (
                 <tr key={c.id} className="hover:bg-secondary/20 transition-colors">
@@ -136,6 +148,13 @@ export default function AdminCharitiesPage() {
                         </select>
                       </td>
                       <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={!!editForm.featured}
+                          onChange={e => setEditForm({ ...editForm, featured: e.target.checked })}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex gap-1">
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-olive" onClick={() => updateMutation.mutate({ id: c.id, data: editForm })}>
                             <Check className="h-3.5 w-3.5" />
@@ -158,9 +177,10 @@ export default function AdminCharitiesPage() {
                           {c.status}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.featured ? 'Yes' : 'No'}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingId(c.id); setEditForm({ name: c.name, category: c.category, location: c.location, status: c.status }); }}>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingId(c.id); setEditForm({ name: c.name, description: c.description, category: c.category, location: c.location, status: c.status, featured: !!c.featured }); }}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => {
@@ -175,7 +195,7 @@ export default function AdminCharitiesPage() {
                 </tr>
               ))
             ) : (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No charities found.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No charities found.</td></tr>
             )}
           </tbody>
         </table>

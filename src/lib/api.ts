@@ -55,11 +55,12 @@ class ApiClient {
   deleteScore(id: number) { return this.request(`/scores/${id}`, { method: 'DELETE' }); }
 
   // Charities
-  getCharities(params?: { search?: string; category?: string; featured?: boolean }) {
+  getCharities(params?: { search?: string; category?: string; featured?: boolean; includeInactive?: boolean }) {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
     if (params?.category) query.set('category', params.category);
     if (params?.featured) query.set('featured', 'true');
+    if (params?.includeInactive) query.set('include_inactive', 'true');
     return this.request(`/charities?${query}`);
   }
   getCharity(id: string) { return this.request(`/charities/${id}`); }
@@ -90,6 +91,7 @@ class ApiClient {
   getMyWinnings() { return this.request('/winners/my'); }
 
   // Reports
+  getPublicStats() { return this.request('/public/stats'); }
   getAdminStats() { return this.request('/reports/admin'); }
   getUserDashboard() { return this.request('/reports/dashboard'); }
   getDrawStats() { return this.request('/admin/draw-stats'); }
@@ -113,7 +115,17 @@ class ApiClient {
 
   // Admin: Winners
   adminUpdateWinner(id: number, status: string) { return this.request(`/admin/winners/${id}`, { method: 'PUT', body: JSON.stringify({ status }) }); }
+
+  // Notifications
+  getNotificationPreferences() { return this.request('/notifications/preferences'); }
+  updateNotificationPreferences(data: Record<string, boolean>) {
+    return this.request('/notifications/preferences', { method: 'PUT', body: JSON.stringify(data) });
+  }
+
+  // Winner proof
+  submitWinnerProof(id: number, proof_url: string) {
+    return this.request(`/winners/${id}/proof`, { method: 'PUT', body: JSON.stringify({ proof_url }) });
+  }
 }
 
 export const api = new ApiClient();
-

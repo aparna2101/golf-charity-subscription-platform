@@ -19,8 +19,8 @@ const plans = [
     period: "/month",
     desc: "Flexible monthly subscription with full access.",
     features: [
-      "Unlimited score submissions",
-      "Monthly prize draw entry",
+      "Up to 5 rolling score records",
+      "Monthly prize draw eligibility",
       "Choose your charity",
       "Set contribution percentage",
       "Full dashboard access",
@@ -35,11 +35,11 @@ const plans = [
     desc: "Save over 16% with annual billing.",
     features: [
       "Everything in Monthly",
-      "2 bonus draw entries per year",
-      "Priority charity spotlight",
-      "Early access to new features",
-      "Annual impact report",
-      "Exclusive member badge",
+      "12 months billed in one payment",
+      "Lower effective monthly price",
+      "Continuous active subscription",
+      "Same real draw and charity workflow",
+      "Single renewal date to manage",
     ],
     popular: true,
     savings: "Save ₹989",
@@ -47,8 +47,8 @@ const plans = [
 ];
 
 const comparison = [
-  { feature: "Score submissions", monthly: "Unlimited", yearly: "Unlimited" },
-  { feature: "Monthly draw entries", monthly: "1", yearly: "1 + 2 bonus" },
+  { feature: "Score records stored", monthly: "Latest 5", yearly: "Latest 5" },
+  { feature: "Monthly draw eligibility", monthly: "Included", yearly: "Included" },
   { feature: "Charity selection", monthly: "✓", yearly: "✓" },
   { feature: "Dashboard access", monthly: "✓", yearly: "✓" },
   { feature: "Impact report", monthly: "—", yearly: "Annual" },

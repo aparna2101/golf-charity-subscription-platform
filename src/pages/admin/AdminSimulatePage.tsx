@@ -90,6 +90,21 @@ export default function AdminSimulatePage() {
                   <p className="font-display text-lg font-bold text-foreground">{simResult.eligible_entries}</p>
                 </div>
               </div>
+              <div className="rounded-xl bg-secondary/50 p-4">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Generated Winners</p>
+                {simResult.winners?.length > 0 ? (
+                  <div className="mt-2 space-y-2">
+                    {simResult.winners.map((winner: any) => (
+                      <div key={`${winner.user_id}-${winner.match_type}`} className="flex items-center justify-between text-sm">
+                        <span className="text-foreground">{winner.user_name} · {winner.match_type}</span>
+                        <span className="font-medium text-primary">₹{Number(winner.prize_amount || 0).toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">No eligible users with scores were available for this draw.</p>
+                )}
+              </div>
             </div>
           </div>
         )}
