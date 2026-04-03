@@ -19,6 +19,11 @@ app.use(express.json());
 
 const port = process.env.PORT || 5001;
 const JWT_SECRET = process.env.JWT_SECRET || 'golfcharitysuperscret2024';
+const DRAW_PRIZE_TIERS = [
+  { matchType: '5-Number', share: 0.4 },
+  { matchType: '4-Number', share: 0.35 },
+  { matchType: '3-Number', share: 0.25 },
+];
 
 // MySQL connection pool
 const pool = mysql.createPool({
@@ -26,7 +31,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'golf_charity_subscription_platform',
-  port: 3306,
+  port: Number(process.env.DB_PORT) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -44,6 +49,69 @@ pool.getConnection()
 // Ensure new tables exist
 async function ensureTables() {
   try {
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS charities (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        members INT DEFAULT 0,
+        contributions DECIMAL(10, 2) DEFAULT 0.00,
+        status ENUM('Active', 'Inactive') DEFAULT 'Active',
+        description TEXT,
+        category VARCHAR(100) DEFAULT 'Community',
+        location VARCHAR(255),
+        image_url VARCHAR(255),
+        is_featured BOOLEAN DEFAULT FALSE
+      )
+    `);
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        plan ENUM('Monthly', 'Yearly') DEFAULT 'Monthly',
+        charity_id INT,
+        charity_contribution_pct INT DEFAULT 10,
+        status ENUM('Active', 'Inactive', 'Pending') DEFAULT 'Active',
+        role ENUM('user', 'admin') DEFAULT 'user',
+        otp_code VARCHAR(10),
+        otp_expiry DATETIME,
+        joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS scores (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        score INT NOT NULL,
+        date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS draws (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        draw_date DATE NOT NULL,
+        prize_pool DECIMAL(10, 2) DEFAULT 0.00,
+        winning_numbers VARCHAR(255),
+        status ENUM('Pending', 'Completed') DEFAULT 'Pending',
+        published BOOLEAN DEFAULT FALSE
+      )
+    `);
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS winners (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        draw_id INT NOT NULL,
+        user_id INT NOT NULL,
+        match_type ENUM('3-Number', '4-Number', '5-Number'),
+        prize_amount DECIMAL(10, 2),
+        status ENUM('Pending', 'Verified', 'Paid', 'Rejected') DEFAULT 'Pending',
+        proof_url VARCHAR(255),
+        FOREIGN KEY (draw_id) REFERENCES draws(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -74,6 +142,17 @@ async function ensureTables() {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS notification_preferences (
+        user_id INT PRIMARY KEY,
+        draw_results BOOLEAN DEFAULT TRUE,
+        winner_alerts BOOLEAN DEFAULT TRUE,
+        charity_updates BOOLEAN DEFAULT FALSE,
+        newsletter BOOLEAN DEFAULT TRUE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
     // Add missing columns to users table if not present
     try { await pool.execute(`ALTER TABLE users ADD COLUMN role ENUM('user', 'admin') DEFAULT 'user'`); } catch(e) {}
     try { await pool.execute(`ALTER TABLE users ADD COLUMN otp_code VARCHAR(10)`); } catch(e) {}
@@ -81,6 +160,8 @@ async function ensureTables() {
     try { await pool.execute(`ALTER TABLE users ADD COLUMN charity_contribution_pct INT DEFAULT 10`); } catch(e) {}
     try { await pool.execute(`ALTER TABLE charities ADD COLUMN category VARCHAR(100) DEFAULT 'Community'`); } catch(e) {}
     try { await pool.execute(`ALTER TABLE charities ADD COLUMN location VARCHAR(255)`); } catch(e) {}
+    try { await pool.execute(`ALTER TABLE charities ADD COLUMN is_featured BOOLEAN DEFAULT FALSE`); } catch(e) {}
+    try { await pool.execute(`ALTER TABLE winners MODIFY COLUMN status ENUM('Pending', 'Verified', 'Paid', 'Rejected') DEFAULT 'Pending'`); } catch(e) {}
     console.log('✅ Database tables verified');
   } catch (err) {
     console.error('Table creation error:', err.message);
@@ -98,11 +179,14 @@ const transporter = nodemailer.createTransport({
 });
 
 // Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || '',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || '',
-});
+let razorpay = null;
 
+if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+  razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
+}
 // Middleware to verify JWT
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -115,6 +199,45 @@ const verifyToken = (req, res, next) => {
     req.userRole = decoded.role;
     next();
   });
+};
+
+const verifyAdmin = (req, res, next) => {
+  if (req.userRole !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
+const getPlatformStats = async () => {
+  const [userCountRows] = await pool.execute('SELECT COUNT(*) as totalUsers FROM users');
+  const [activeRows] = await pool.execute('SELECT COUNT(*) as activeSubscribers FROM users WHERE status = "Active"');
+  const [poolRows] = await pool.execute('SELECT COALESCE(SUM(prize_pool), 0) as totalPool FROM draws');
+  const [charityRows] = await pool.execute('SELECT COALESCE(SUM(contributions), 0) as charityTotal FROM charities');
+  const [revenueRows] = await pool.execute('SELECT COALESCE(SUM(amount), 0) as totalRevenue FROM payments WHERE status = "paid"');
+  const [nextDrawRows] = await pool.execute(
+    'SELECT id, draw_date, prize_pool, winning_numbers, status, published FROM draws WHERE status = "Pending" ORDER BY draw_date ASC LIMIT 1'
+  );
+
+  return {
+    totalUsers: userCountRows[0].totalUsers,
+    activeSubscribers: activeRows[0].activeSubscribers,
+    totalPool: parseFloat(poolRows[0].totalPool),
+    charityTotal: parseFloat(charityRows[0].charityTotal),
+    totalRevenue: parseFloat(revenueRows[0].totalRevenue),
+    nextDraw: nextDrawRows.length > 0 ? nextDrawRows[0] : null,
+  };
+};
+
+const ensureNotificationPreferences = async (userId) => {
+  await pool.execute(
+    'INSERT INTO notification_preferences (user_id) VALUES (?) ON DUPLICATE KEY UPDATE user_id = user_id',
+    [userId]
+  );
+  const [rows] = await pool.execute(
+    'SELECT draw_results, winner_alerts, charity_updates, newsletter FROM notification_preferences WHERE user_id = ?',
+    [userId]
+  );
+  return rows[0];
 };
 
 // ===================== AUTH ROUTES =====================
@@ -274,6 +397,15 @@ app.put('/api/auth/password', verifyToken, async (req, res) => {
   }
 });
 
+app.get('/api/public/stats', async (_req, res) => {
+  try {
+    const stats = await getPlatformStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ===================== SCORES ROUTES =====================
 
 app.get('/api/scores', verifyToken, async (req, res) => {
@@ -336,7 +468,51 @@ app.delete('/api/scores/:id', verifyToken, async (req, res) => {
 
 app.get('/api/charities', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT id, name, members, contributions, status, description, category, location FROM charities');
+    const { search = '', category, featured, include_inactive } = req.query;
+    const filters = [];
+    const values = [];
+
+    if (include_inactive === 'true') {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (!token) {
+        return res.status(401).json({ error: 'Admin token required for inactive charities' });
+      }
+
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+          return res.status(403).json({ error: 'Admin access required' });
+        }
+      } catch {
+        return res.status(403).json({ error: 'Failed to authenticate token' });
+      }
+    }
+
+    if (include_inactive !== 'true') {
+      filters.push('status = "Active"');
+    }
+    if (search) {
+      filters.push('name LIKE ?');
+      values.push(`%${search}%`);
+    }
+    if (category && category !== 'All') {
+      filters.push('category = ?');
+      values.push(category);
+    }
+    if (featured === 'true') {
+      filters.push('is_featured = TRUE');
+    }
+
+    const sql = `
+      SELECT id, name, members, contributions, status, description, category, location, is_featured AS featured
+      FROM charities
+      ${filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : ''}
+      ORDER BY is_featured DESC, name ASC
+    `;
+
+    const [rows] = await pool.execute(sql, values);
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -345,7 +521,7 @@ app.get('/api/charities', async (req, res) => {
 
 app.get('/api/charities/:id', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM charities WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.execute('SELECT *, is_featured AS featured FROM charities WHERE id = ?', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Charity not found' });
     res.json(rows[0]);
   } catch (error) {
@@ -355,7 +531,7 @@ app.get('/api/charities/:id', async (req, res) => {
 
 // ===================== DRAWS ROUTES =====================
 
-app.get('/api/draws', verifyToken, async (req, res) => {
+app.get('/api/draws', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const [rows] = await pool.execute('SELECT * FROM draws ORDER BY draw_date DESC');
     res.json(rows);
@@ -391,7 +567,7 @@ app.get('/api/draws/next', verifyToken, async (req, res) => {
   }
 });
 
-app.post('/api/draws', verifyToken, async (req, res) => {
+app.post('/api/draws', verifyToken, verifyAdmin, async (req, res) => {
   const { draw_date, prize_pool } = req.body;
   try {
     await pool.execute(
@@ -404,14 +580,20 @@ app.post('/api/draws', verifyToken, async (req, res) => {
   }
 });
 
-app.post('/api/draws/:id/simulate', verifyToken, async (req, res) => {
+app.post('/api/draws/:id/simulate', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const drawId = req.params.id;
     const [drawRows] = await pool.execute('SELECT * FROM draws WHERE id = ?', [drawId]);
     if (drawRows.length === 0) return res.status(404).json({ error: 'Draw not found' });
+    const draw = drawRows[0];
 
-    const [activeUsers] = await pool.execute('SELECT COUNT(*) as count FROM users WHERE status = "Active"');
-    const eligibleCount = activeUsers[0].count;
+    const [eligibleRows] = await pool.execute(`
+      SELECT DISTINCT u.id, u.name
+      FROM users u
+      JOIN scores s ON s.user_id = u.id
+      WHERE u.status = "Active"
+    `);
+    const eligibleCount = eligibleRows.length;
 
     // Generate 5 winning numbers (1-45)
     const winningNumbers = [];
@@ -426,10 +608,35 @@ app.post('/api/draws/:id/simulate', verifyToken, async (req, res) => {
       [winningNumbers.join(','), drawId]
     );
 
+    await pool.execute('DELETE FROM winners WHERE draw_id = ?', [drawId]);
+
+    const shuffledEligible = [...eligibleRows].sort(() => Math.random() - 0.5);
+    const generatedWinners = [];
+
+    for (let index = 0; index < DRAW_PRIZE_TIERS.length && index < shuffledEligible.length; index += 1) {
+      const tier = DRAW_PRIZE_TIERS[index];
+      const winner = shuffledEligible[index];
+      const prizeAmount = Number((Number(draw.prize_pool || 0) * tier.share).toFixed(2));
+
+      await pool.execute(
+        'INSERT INTO winners (draw_id, user_id, match_type, prize_amount, status) VALUES (?, ?, ?, ?, "Pending")',
+        [drawId, winner.id, tier.matchType, prizeAmount]
+      );
+
+      generatedWinners.push({
+        user_id: winner.id,
+        user_name: winner.name,
+        match_type: tier.matchType,
+        prize_amount: prizeAmount,
+      });
+    }
+
     res.json({
       draw_id: drawId,
       eligible_entries: eligibleCount,
       winning_numbers: winningNumbers,
+      winners_created: generatedWinners.length,
+      winners: generatedWinners,
       message: 'Simulation completed successfully'
     });
   } catch (error) {
@@ -437,7 +644,7 @@ app.post('/api/draws/:id/simulate', verifyToken, async (req, res) => {
   }
 });
 
-app.post('/api/draws/:id/publish', verifyToken, async (req, res) => {
+app.post('/api/draws/:id/publish', verifyToken, verifyAdmin, async (req, res) => {
   try {
     await pool.execute(
       'UPDATE draws SET published = TRUE, status = "Completed" WHERE id = ?',
@@ -451,7 +658,7 @@ app.post('/api/draws/:id/publish', verifyToken, async (req, res) => {
 
 // ===================== WINNERS ROUTES =====================
 
-app.get('/api/winners', verifyToken, async (req, res) => {
+app.get('/api/winners', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT w.*, u.name as user_name, d.draw_date
@@ -481,6 +688,31 @@ app.get('/api/winners/my', verifyToken, async (req, res) => {
   }
 });
 
+app.put('/api/winners/:id/proof', verifyToken, async (req, res) => {
+  const { proof_url } = req.body;
+
+  if (!proof_url) {
+    return res.status(400).json({ error: 'Proof URL is required' });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      `UPDATE winners
+       SET proof_url = ?, status = CASE WHEN status = "Rejected" THEN "Pending" ELSE status END
+       WHERE id = ? AND user_id = ?`,
+      [proof_url, req.params.id, req.userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Winner record not found' });
+    }
+
+    res.json({ message: 'Proof submitted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ===================== SUBSCRIPTION & PAYMENT ROUTES (RAZORPAY) =====================
 
 app.get('/api/subscriptions', verifyToken, async (req, res) => {
@@ -500,10 +732,9 @@ app.post('/api/subscriptions/create-order', verifyToken, async (req, res) => {
   const amount = plan === 'Yearly' ? 499900 : 49900; // In paise (₹4,999 or ₹499)
   
   try {
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return res.status(500).json({ error: 'Razorpay is not configured. Contact admin.' });
-    }
-    
+   if (!razorpay) {
+  return res.status(500).json({ error: 'Razorpay is not configured yet. Contact admin.' });
+}
     const order = await razorpay.orders.create({
       amount,
       currency: 'INR',
@@ -615,6 +846,40 @@ app.get('/api/payments', verifyToken, async (req, res) => {
   }
 });
 
+app.get('/api/notifications/preferences', verifyToken, async (req, res) => {
+  try {
+    const preferences = await ensureNotificationPreferences(req.userId);
+    res.json(preferences);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/notifications/preferences', verifyToken, async (req, res) => {
+  const drawResults = req.body.draw_results !== undefined ? !!req.body.draw_results : true;
+  const winnerAlerts = req.body.winner_alerts !== undefined ? !!req.body.winner_alerts : true;
+  const charityUpdates = req.body.charity_updates !== undefined ? !!req.body.charity_updates : false;
+  const newsletter = req.body.newsletter !== undefined ? !!req.body.newsletter : true;
+
+  try {
+    await pool.execute(
+      `INSERT INTO notification_preferences (user_id, draw_results, winner_alerts, charity_updates, newsletter)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         draw_results = VALUES(draw_results),
+         winner_alerts = VALUES(winner_alerts),
+         charity_updates = VALUES(charity_updates),
+         newsletter = VALUES(newsletter)`,
+      [req.userId, drawResults, winnerAlerts, charityUpdates, newsletter]
+    );
+
+    const preferences = await ensureNotificationPreferences(req.userId);
+    res.json(preferences);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ===================== USER DASHBOARD STATS =====================
 
 app.get('/api/reports/dashboard', verifyToken, async (req, res) => {
@@ -650,27 +915,16 @@ app.get('/api/reports/dashboard', verifyToken, async (req, res) => {
 
 // ===================== ADMIN ROUTES =====================
 
-app.get('/api/reports/admin', verifyToken, async (req, res) => {
+app.get('/api/reports/admin', verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const [userCountRows] = await pool.execute('SELECT COUNT(*) as totalUsers FROM users');
-    const [activeRows] = await pool.execute('SELECT COUNT(*) as activeSubscribers FROM users WHERE status = "Active"');
-    const [poolRows] = await pool.execute('SELECT COALESCE(SUM(prize_pool), 0) as totalPool FROM draws');
-    const [charityRows] = await pool.execute('SELECT COALESCE(SUM(contributions), 0) as charityTotal FROM charities');
-    const [revenueRows] = await pool.execute('SELECT COALESCE(SUM(amount), 0) as totalRevenue FROM payments WHERE status = "paid"');
-
-    res.json({
-      totalUsers: userCountRows[0].totalUsers,
-      activeSubscribers: activeRows[0].activeSubscribers,
-      totalPool: parseFloat(poolRows[0].totalPool),
-      charityTotal: parseFloat(charityRows[0].charityTotal),
-      totalRevenue: parseFloat(revenueRows[0].totalRevenue),
-    });
+    const stats = await getPlatformStats();
+    res.json(stats);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/users', verifyToken, async (req, res) => {
+app.get('/api/users', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT u.id, u.name, u.email, u.plan, u.status, u.role, u.joined_date,
@@ -685,7 +939,7 @@ app.get('/api/users', verifyToken, async (req, res) => {
   }
 });
 
-app.get('/api/admin/scores', verifyToken, async (req, res) => {
+app.get('/api/admin/scores', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT s.*, u.name as user_name, u.email as user_email
@@ -699,7 +953,7 @@ app.get('/api/admin/scores', verifyToken, async (req, res) => {
 });
 
 // Admin: Edit any score
-app.put('/api/admin/scores/:id', verifyToken, async (req, res) => {
+app.put('/api/admin/scores/:id', verifyToken, verifyAdmin, async (req, res) => {
   const { score, play_date } = req.body;
   try {
     const fields = [];
@@ -716,7 +970,7 @@ app.put('/api/admin/scores/:id', verifyToken, async (req, res) => {
 });
 
 // Admin: Delete any score
-app.delete('/api/admin/scores/:id', verifyToken, async (req, res) => {
+app.delete('/api/admin/scores/:id', verifyToken, verifyAdmin, async (req, res) => {
   try {
     await pool.execute('DELETE FROM scores WHERE id = ?', [req.params.id]);
     res.json({ message: 'Score deleted' });
@@ -726,7 +980,7 @@ app.delete('/api/admin/scores/:id', verifyToken, async (req, res) => {
 });
 
 // Admin: Edit user
-app.put('/api/admin/users/:id', verifyToken, async (req, res) => {
+app.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => {
   const { name, email, plan, status, role, charity_id, charity_contribution_pct } = req.body;
   try {
     const fields = [];
@@ -748,7 +1002,7 @@ app.put('/api/admin/users/:id', verifyToken, async (req, res) => {
 });
 
 // Admin: Delete user
-app.delete('/api/admin/users/:id', verifyToken, async (req, res) => {
+app.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => {
   try {
     await pool.execute('DELETE FROM users WHERE id = ?', [req.params.id]);
     res.json({ message: 'User deleted' });
@@ -758,12 +1012,12 @@ app.delete('/api/admin/users/:id', verifyToken, async (req, res) => {
 });
 
 // Admin: Add charity
-app.post('/api/admin/charities', verifyToken, async (req, res) => {
-  const { name, description, category, location } = req.body;
+app.post('/api/admin/charities', verifyToken, verifyAdmin, async (req, res) => {
+  const { name, description, category, location, featured } = req.body;
   try {
     await pool.execute(
-      'INSERT INTO charities (name, description, category, location, status) VALUES (?, ?, ?, ?, "Active")',
-      [name, description || '', category || 'Community', location || '']
+      'INSERT INTO charities (name, description, category, location, status, is_featured) VALUES (?, ?, ?, ?, "Active", ?)',
+      [name, description || '', category || 'Community', location || '', featured ? 1 : 0]
     );
     res.status(201).json({ message: 'Charity added' });
   } catch (error) {
@@ -772,8 +1026,8 @@ app.post('/api/admin/charities', verifyToken, async (req, res) => {
 });
 
 // Admin: Edit charity
-app.put('/api/admin/charities/:id', verifyToken, async (req, res) => {
-  const { name, description, category, location, status } = req.body;
+app.put('/api/admin/charities/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const { name, description, category, location, status, featured } = req.body;
   try {
     const fields = [];
     const values = [];
@@ -782,6 +1036,7 @@ app.put('/api/admin/charities/:id', verifyToken, async (req, res) => {
     if (category) { fields.push('category = ?'); values.push(category); }
     if (location !== undefined) { fields.push('location = ?'); values.push(location); }
     if (status) { fields.push('status = ?'); values.push(status); }
+    if (featured !== undefined) { fields.push('is_featured = ?'); values.push(featured ? 1 : 0); }
     if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
     values.push(req.params.id);
     await pool.execute(`UPDATE charities SET ${fields.join(', ')} WHERE id = ?`, values);
@@ -792,7 +1047,7 @@ app.put('/api/admin/charities/:id', verifyToken, async (req, res) => {
 });
 
 // Admin: Delete charity
-app.delete('/api/admin/charities/:id', verifyToken, async (req, res) => {
+app.delete('/api/admin/charities/:id', verifyToken, verifyAdmin, async (req, res) => {
   try {
     await pool.execute('DELETE FROM charities WHERE id = ?', [req.params.id]);
     res.json({ message: 'Charity deleted' });
@@ -802,7 +1057,7 @@ app.delete('/api/admin/charities/:id', verifyToken, async (req, res) => {
 });
 
 // Admin: Update winner status (Verify / Reject / Mark Paid)
-app.put('/api/admin/winners/:id', verifyToken, async (req, res) => {
+app.put('/api/admin/winners/:id', verifyToken, verifyAdmin, async (req, res) => {
   const { status } = req.body;
   try {
     if (!['Pending', 'Verified', 'Paid', 'Rejected'].includes(status)) {
@@ -816,7 +1071,7 @@ app.put('/api/admin/winners/:id', verifyToken, async (req, res) => {
 });
 
 // Admin: Draw statistics
-app.get('/api/admin/draw-stats', verifyToken, async (req, res) => {
+app.get('/api/admin/draw-stats', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const [totalDraws] = await pool.execute('SELECT COUNT(*) as count FROM draws');
     const [completedDraws] = await pool.execute('SELECT COUNT(*) as count FROM draws WHERE status = "Completed"');
@@ -839,4 +1094,3 @@ app.get('/api/admin/draw-stats', verifyToken, async (req, res) => {
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
-
