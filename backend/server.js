@@ -1091,6 +1091,10 @@ app.get('/api/admin/draw-stats', verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+app.get('/', (req, res) => {
+  res.send('Score for Good API is running!');
+});
+
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
