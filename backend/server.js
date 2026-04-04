@@ -270,27 +270,27 @@ app.post('/api/auth/signup', async (req, res) => {
       );
     }
 
-    try {
-      await transporter.sendMail({
-        from: `"Score for Good" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: 'Verify Your Email - Score for Good',
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:30px;border:1px solid #e5e7eb;border-radius:12px">
-            <h2 style="color:#7c5c2e">Welcome to Score for Good!</h2>
-            <p>Hi ${first_name},</p>
-            <p>Your verification code is:</p>
-            <div style="background:#f5f0e8;padding:20px;text-align:center;border-radius:8px;margin:20px 0">
-              <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#7c5c2e">${otp}</span>
-            </div>
-            <p>This code expires in <strong>10 minutes</strong>.</p>
-            <p style="color:#888;font-size:12px">If you did not sign up, please ignore this email.</p>
-          </div>`,
-      });
+    // Do not await the mail sending so the HTTP request doesn't hang if SMTP times out
+    transporter.sendMail({
+      from: `"Score for Good" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Verify Your Email - Score for Good',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:30px;border:1px solid #e5e7eb;border-radius:12px">
+          <h2 style="color:#7c5c2e">Welcome to Score for Good!</h2>
+          <p>Hi ${first_name},</p>
+          <p>Your verification code is:</p>
+          <div style="background:#f5f0e8;padding:20px;text-align:center;border-radius:8px;margin:20px 0">
+            <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#7c5c2e">${otp}</span>
+          </div>
+          <p>This code expires in <strong>10 minutes</strong>.</p>
+          <p style="color:#888;font-size:12px">If you did not sign up, please ignore this email.</p>
+        </div>`,
+    }).then(() => {
       console.log(`✅ OTP email sent to ${email}: ${otp}`);
-    } catch (mailErr) {
+    }).catch(mailErr => {
       console.error('❌ Email send failed:', mailErr.message);
-    }
+    });
 
     res.status(201).json({ message: 'Verification code sent to your email. Please check your inbox.', email });
   } catch (error) {
