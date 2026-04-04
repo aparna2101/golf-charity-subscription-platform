@@ -139,6 +139,21 @@ export default function SignupPage() {
                     {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Verify & Continue
                   </Button>
+                  <div className="pt-2 text-center">
+                    <button type="button" onClick={async () => {
+                      try {
+                        setLoading(true);
+                        await api.resendOtp(form.email);
+                        toast({ title: "OTP Resent", description: "A new code has been sent to your email." });
+                      } catch(err: any) {
+                        toast({ title: "Failed to resend", description: err.message, variant: "destructive" });
+                      } finally {
+                        setLoading(false);
+                      }
+                    }} disabled={loading} className="text-sm font-medium text-primary hover:underline">
+                      Resend Verification Code
+                    </button>
+                  </div>
                   <button type="button" onClick={() => setStep('form')} className="w-full text-center text-sm text-muted-foreground hover:underline">
                     Back to signup
                   </button>

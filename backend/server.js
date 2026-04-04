@@ -324,6 +324,40 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   }
 });
 
+app.post('/api/auth/resend-otp', async (req, res) => {
+  const { email } = req.body;
+  try {
+    const [rows] = await pool.execute('SELECT id, name, status FROM users WHERE email = ?', [email]);
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (rows[0].status === 'Active') return res.status(400).json({ error: 'User already verified' });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 10 * 60 * 1000);
+    
+    await pool.execute('UPDATE users SET otp_code = ?, otp_expiry = ? WHERE email = ?', [otp, expiry, email]);
+
+    transporter.sendMail({
+      from: `"Score for Good" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Verify Your Email - Score for Good',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:30px;border:1px solid #e5e7eb;border-radius:12px">
+          <h2 style="color:#7c5c2e">Resent OTP Code!</h2>
+          <p>Hi ${rows[0].name},</p>
+          <p>Here is your new verification code:</p>
+          <div style="background:#f5f0e8;padding:20px;text-align:center;border-radius:8px;margin:20px 0">
+            <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#7c5c2e">${otp}</span>
+          </div>
+          <p>This code expires in <strong>10 minutes</strong>.</p>
+        </div>`,
+    }).catch(mailErr => console.error('❌ Resend Email fail:', mailErr.message));
+
+    res.json({ message: 'OTP resent successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {

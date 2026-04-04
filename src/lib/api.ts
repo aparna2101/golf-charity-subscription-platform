@@ -40,6 +40,9 @@ class ApiClient {
   verifyOtp(email: string, otp: string) {
     return this.request('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, otp }) });
   }
+  resendOtp(email: string) {
+    return this.request('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) });
+  }
   login(email: string, password: string) {
     return this.request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
   }
