@@ -6,7 +6,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
-export default function LoginPage() {
+export default function AdminLoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,14 +20,13 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const u = await login(email, password);
-      if (u.role === 'admin') {
+      if (u.role !== 'admin') {
         logout();
-        navigate("/admin/login");
-        toast({ title: "Admin Portal", description: "Navigated to Admin login portal automatically." });
+        toast({ title: "Access Denied", description: "You are not an administrator.", variant: "destructive" });
         return;
       }
-      toast({ title: "Welcome back!", description: "You've been signed in successfully." });
-      navigate("/dashboard");
+      toast({ title: "Admin Portal", description: "Successfully authenticated as Admin." });
+      navigate("/admin");
     } catch (err: any) {
       if (err.message.includes("verify your email")) {
         toast({ title: "Verification needed", description: "Please verify your email to continue." });
@@ -47,8 +46,8 @@ export default function LoginPage() {
         <div className="w-full max-w-md animate-fade-in">
           <div className="rounded-2xl border border-border bg-card p-8 shadow-elevated sm:p-10">
             <div className="mb-8 text-center">
-              <h1 className="font-display text-2xl font-bold text-foreground">Welcome Back</h1>
-              <p className="mt-2 text-sm text-muted-foreground">Sign in to your Score for Good account</p>
+              <h1 className="font-display text-2xl font-bold text-foreground">Admin Login</h1>
+              <p className="mt-2 text-sm text-muted-foreground">Secure access to Score for Good Admin Portal</p>
             </div>
 
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -83,8 +82,8 @@ export default function LoginPage() {
             </form>
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <Link to="/signup" className="font-medium text-primary hover:underline">Sign up</Link>
+              Return to website?{" "}
+              <Link to="/login" className="font-medium text-primary hover:underline">User Login</Link>
             </p>
           </div>
         </div>

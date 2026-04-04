@@ -21,6 +21,7 @@ import PaymentsPage from "./pages/dashboard/PaymentsPage";
 import WinnerProofPage from "./pages/dashboard/WinnerProofPage";
 import SettingsPage from "./pages/dashboard/SettingsPage";
 import NotificationsPage from "./pages/dashboard/NotificationsPage";
+import AdminLoginPage from "./pages/admin/AdminLoginPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminSubscriptionsPage from "./pages/admin/AdminSubscriptionsPage";
@@ -54,7 +55,7 @@ function AdminRoute({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
 
   return isAdmin ? children : <Navigate to="/dashboard" replace />;
@@ -88,6 +89,7 @@ const App = () => (
           <Route path="/dashboard/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
           {/* Admin */}
+          <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
           <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
           <Route path="/admin/subscriptions" element={<AdminRoute><AdminSubscriptionsPage /></AdminRoute>} />
