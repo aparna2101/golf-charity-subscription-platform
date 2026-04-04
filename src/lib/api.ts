@@ -1,5 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL || 'https://golf-charity-subscription-platform-j7yq.onrender.com/api';
-
+let API_URL = import.meta.env.VITE_API_URL || 'https://golf-charity-subscription-platform-j7yq.onrender.com/api';
+if (API_URL.endsWith('/')) API_URL = API_URL.slice(0, -1);
+if (!API_URL.endsWith('/api')) API_URL += '/api';
 class ApiClient {
   private token: string | null = null;
 
