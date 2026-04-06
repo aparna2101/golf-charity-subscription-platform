@@ -1,0 +1,45 @@
+﻿diff --git a/backend/server.js b/backend/server.js
+index 81783d6..7628895 100644
+--- a/backend/server.js
++++ b/backend/server.js
+@@ -253,6 +253,7 @@ app.post('/api/auth/signup', async (req, res) => {
+ 
+     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+     const expiry = new Date(Date.now() + 10 * 60 * 1000);
++    console.log(`🛠️ Generated OTP for ${email}: ${otp} (expires ${expiry})`);
+ 
+     if (existing.length > 0) {
+       const existingUser = existing[0];
+@@ -292,6 +293,12 @@ app.post('/api/auth/signup', async (req, res) => {
+       console.error('❌ Email send failed:', mailErr.message);
+     });
+ 
++    // In development, also return OTP in response for easier testing
++    if (process.env.NODE_ENV !== 'production') {
++      res.status(201).json({ message: 'Verification code sent', email, otp });
++      return;
++    }
++
+     res.status(201).json({ message: 'Verification code sent to your email. Please check your inbox.', email });
+   } catch (error) {
+     console.error('Signup error:', error.message);
+@@ -336,6 +343,7 @@ app.post('/api/auth/resend-otp', async (req, res) => {
+     
+     await pool.execute('UPDATE users SET otp_code = ?, otp_expiry = ? WHERE email = ?', [otp, expiry, email]);
+ 
++    console.log(`🛠️ Resending OTP for ${email}: ${otp} (expires ${expiry})`);
+     transporter.sendMail({
+       from: `"Score for Good" <${process.env.EMAIL_USER}>`,
+       to: email,
+@@ -352,6 +360,11 @@ app.post('/api/auth/resend-otp', async (req, res) => {
+         </div>`,
+     }).catch(mailErr => console.error('❌ Resend Email fail:', mailErr.message));
+ 
++    // In dev, also return OTP for easier testing
++    if (process.env.NODE_ENV !== 'production') {
++      res.json({ message: 'OTP resent successfully', otp });
++      return;
++    }
+     res.json({ message: 'OTP resent successfully' });
+   } catch (error) {
+     res.status(500).json({ error: error.message });
