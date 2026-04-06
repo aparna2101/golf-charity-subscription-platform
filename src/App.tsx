@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import PlansPage from "./pages/PlansPage";
@@ -13,6 +14,8 @@ import CharityDetailPage from "./pages/CharityDetailPage";
 import HowItWorksPage from "./pages/HowItWorksPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
+
 import DashboardOverview from "./pages/dashboard/DashboardOverview";
 import ScoresPage from "./pages/dashboard/ScoresPage";
 import DrawsPage from "./pages/dashboard/DrawsPage";
@@ -21,6 +24,7 @@ import PaymentsPage from "./pages/dashboard/PaymentsPage";
 import WinnerProofPage from "./pages/dashboard/WinnerProofPage";
 import SettingsPage from "./pages/dashboard/SettingsPage";
 import NotificationsPage from "./pages/dashboard/NotificationsPage";
+
 import AdminLoginPage from "./pages/admin/AdminLoginPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
@@ -77,6 +81,7 @@ const App = () => (
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/verify" element={<VerifyEmailPage />} />
 
           {/* User Dashboard */}
           <Route path="/dashboard" element={<ProtectedRoute><DashboardOverview /></ProtectedRoute>} />

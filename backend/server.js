@@ -252,8 +252,10 @@ app.post('/api/auth/signup', async (req, res) => {
     const [existing] = await pool.execute('SELECT id, status FROM users WHERE email = ?', [email]);
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 10 * 60 * 1000);
-    console.log(`🛠️ Generated OTP for ${email}: ${otp} (expires ${expiry})`);
+    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours link expiry
+    const verifyLink = `${process.env.VITE_API_URL.replace('/api', '')}/verify?email=${encodeURIComponent(email)}&token=${otp}`;
+    
+    console.log(`🛠️ Generated Link for ${email}: ${verifyLink} (expires 24h)`);
 
     if (existing.length > 0) {
       const existingUser = existing[0];
@@ -280,15 +282,17 @@ app.post('/api/auth/signup', async (req, res) => {
         <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:30px;border:1px solid #e5e7eb;border-radius:12px">
           <h2 style="color:#7c5c2e">Welcome to Score for Good!</h2>
           <p>Hi ${first_name},</p>
-          <p>Your verification code is:</p>
-          <div style="background:#f5f0e8;padding:20px;text-align:center;border-radius:8px;margin:20px 0">
-            <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#7c5c2e">${otp}</span>
+          <p>Please click the button below to verify your email address:</p>
+          <div style="text-align:center;margin:30px 0">
+            <a href="${verifyLink}" style="background:#7c5c2e;color:#fff;padding:15px 30px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block">Verify Email & Login</a>
           </div>
-          <p>This code expires in <strong>10 minutes</strong>.</p>
-          <p style="color:#888;font-size:12px">If you did not sign up, please ignore this email.</p>
+          <p>If the button doesn't work, copy and paste this link into your browser:</p>
+          <p style="word-break:break-all;color:#888;font-size:12px">${verifyLink}</p>
+          <hr style="border:none;border-top:1px solid #eee;margin:25px 0">
+          <p style="color:#888;font-size:12px">This link will expire in 24 hours. If you did not sign up, please ignore this email.</p>
         </div>`,
     }).then(() => {
-      console.log(`✅ OTP email sent to ${email}: ${otp}`);
+      console.log(`✅ Verification link sent to ${email}`);
     }).catch(mailErr => {
       console.error('❌ Email send failed:', mailErr.message);
     });
