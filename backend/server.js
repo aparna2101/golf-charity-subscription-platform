@@ -13,6 +13,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '.env') });
 
+const VITE_API_URL = process.env.VITE_API_URL || 'https://golf-charity-subscription-platform-j7yq.onrender.com/api';
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -253,7 +255,8 @@ app.post('/api/auth/signup', async (req, res) => {
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours link expiry
-    const verifyLink = `${process.env.VITE_API_URL.replace('/api', '')}/verify?email=${encodeURIComponent(email)}&token=${otp}`;
+    const frontendBaseUrl = VITE_API_URL.replace('/api', '');
+    const verifyLink = `${frontendBaseUrl}/verify?email=${encodeURIComponent(email)}&token=${otp}`;
     
     console.log(`🛠️ Generated Link for ${email}: ${verifyLink} (expires 24h)`);
 
