@@ -262,19 +262,26 @@ app.post('/api/auth/signup', async (req, res) => {
 
     if (existing.length > 0) {
       const existingUser = existing[0];
-      if (existingUser.status === 'Active') {
+      if (existingUser.status === 'Active' || existingUser.status === 'Pending') {
         return res.status(409).json({ error: 'Email already registered. Please login.' });
       }
-      await pool.execute(
-        'UPDATE users SET otp_code = ?, otp_expiry = ? WHERE id = ?',
-        [otp, expiry, existingUser.id]
-      );
-    } else {
-      await pool.execute(
-        'INSERT INTO users (name, email, password, charity_id, charity_contribution_pct, otp_code, otp_expiry, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [`${first_name} ${last_name}`, email, password, charity_id || null, charity_contribution_pct || 10, otp, expiry, 'Pending']
-      );
     }
+
+    const [result] = await pool.execute(
+      'INSERT INTO users (name, email, password, charity_id, charity_contribution_pct, status, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [`${first_name} ${last_name}`, email, password, charity_id || null, charity_contribution_pct || 10, 'Active', 'user']
+    );
+
+    const userId = result.insertId;
+    const token = jwt.sign({ id: userId, role: 'user' }, JWT_SECRET, { expiresIn: '7d' });
+
+    console.log(`✅ User ${email} registered and activated immediately.`);
+
+    res.status(201).json({ 
+      message: 'Signup successful!', 
+      token, 
+      user: { id: userId, email, name: `${first_name} ${last_name}`, role: 'user' } 
+    });
 
     // Do not await the mail sending so the HTTP request doesn't hang if SMTP times out
     transporter.sendMail({

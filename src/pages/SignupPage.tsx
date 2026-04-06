@@ -40,12 +40,12 @@ export default function SignupPage() {
     if (pct < 10) { toast({ title: "Minimum 10%", description: "Charity contribution must be at least 10%.", variant: "destructive" }); return; }
     setLoading(true);
     try {
-      await api.signup({ ...form, charity_id: form.charity_id ? parseInt(form.charity_id) : undefined, charity_contribution_pct: pct });
+      await signup({ ...form, charity_id: form.charity_id ? parseInt(form.charity_id) : undefined, charity_contribution_pct: pct });
       toast({ 
-        title: "✉️ Check your email!", 
-        description: `We've sent a 6-digit OTP to ${form.email}. Enter it below to verify your account.`
+        title: "Welcome! 🎉", 
+        description: "Your account has been created successfully."
       });
-      setStep('otp');
+      navigate("/dashboard");
     } catch (err: any) {
       toast({ title: "Signup failed", description: err.message, variant: "destructive" });
     } finally { setLoading(false); }
