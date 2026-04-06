@@ -127,17 +127,18 @@ export default function SignupPage() {
               <>
                 <div className="mb-8 text-center">
                   <h1 className="font-display text-2xl font-bold text-foreground">Verify Your Email</h1>
-                  <p className="mt-2 text-sm text-muted-foreground">We've sent a code to {form.email}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">We've sent a <b>verification link</b> to {form.email}</p>
+                  <p className="mt-1 text-xs text-muted-foreground italic">Please click the button in your email to automatically verify and login.</p>
                 </div>
                 <form className="space-y-5" onSubmit={handleVerify}>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-foreground">Verification Code</label>
-                    <input type="text" value={otp} onChange={(e) => setOtp(e.target.value)} required placeholder="6-digit code"
+                  <div className="rounded-lg bg-secondary/30 p-4 text-center border border-border/50">
+                    <p className="text-sm font-medium text-foreground mb-3">Already have the code?</p>
+                    <input type="text" value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="Enter 6-digit code here"
                       className="h-11 w-full rounded-lg border border-border bg-background px-4 text-center text-lg font-bold tracking-widest text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
-                  <Button variant="hero" className="w-full" size="lg" type="submit" disabled={loading}>
+                  <Button variant="hero" className="w-full" size="lg" type="submit" disabled={loading || !otp}>
                     {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Verify & Continue
+                    Verify with Code
                   </Button>
                   <div className="pt-2 text-center">
                     <button type="button" onClick={async () => {
