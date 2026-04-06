@@ -15,7 +15,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
-  signup: (data: any) => Promise<void>;
+  signup: (data: any) => Promise<User>;
   logout: () => void;
   isAdmin: boolean;
   isAuthenticated: boolean;
@@ -58,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.signup(data);
     api.setToken(res.token);
     setUser(res.user);
+    return res.user;
   };
 
   const logout = () => {

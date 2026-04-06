@@ -28,13 +28,7 @@ export default function AdminLoginPage() {
       toast({ title: "Admin Portal", description: "Successfully authenticated as Admin." });
       navigate("/admin");
     } catch (err: any) {
-      if (err.message.includes("verify your email")) {
-        toast({ title: "Verification needed", description: "Please verify your email to continue." });
-        // Optionally navigate to signup with a flag to show OTP step
-        navigate("/signup", { state: { email, step: 'otp' } });
-      } else {
-        toast({ title: "Login failed", description: err.message, variant: "destructive" });
-      }
+      toast({ title: "Login failed", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }

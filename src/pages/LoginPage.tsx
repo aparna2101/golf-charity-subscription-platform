@@ -29,13 +29,7 @@ export default function LoginPage() {
       toast({ title: "Welcome back!", description: "You've been signed in successfully." });
       navigate("/dashboard");
     } catch (err: any) {
-      if (err.message.includes("verify your email")) {
-        toast({ title: "Verification needed", description: "Please verify your email to continue." });
-        // Optionally navigate to signup with a flag to show OTP step
-        navigate("/signup", { state: { email, step: 'otp' } });
-      } else {
-        toast({ title: "Login failed", description: err.message, variant: "destructive" });
-      }
+      toast({ title: "Login failed", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }

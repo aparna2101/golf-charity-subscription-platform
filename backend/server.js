@@ -251,7 +251,8 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   try {
-    const [existing] = await pool.execute('SELECT id, status FROM users WHERE email = ?', [email]);
+    const [existing] = await pool.execute('SELECT id, status, role FROM users WHERE email = ?', [email]);
+    const fullName = `${first_name} ${last_name}`.trim();
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours link expiry
@@ -262,14 +263,29 @@ app.post('/api/auth/signup', async (req, res) => {
 
     if (existing.length > 0) {
       const existingUser = existing[0];
-      if (existingUser.status === 'Active' || existingUser.status === 'Pending') {
+      if (existingUser.role === 'admin' || existingUser.status === 'Active') {
         return res.status(409).json({ error: 'Email already registered. Please login.' });
       }
+
+      await pool.execute(
+        `UPDATE users
+         SET name = ?, password = ?, charity_id = ?, charity_contribution_pct = ?,
+             status = "Active", role = "user", otp_code = NULL, otp_expiry = NULL
+         WHERE id = ?`,
+        [fullName, password, charity_id || null, charity_contribution_pct || 10, existingUser.id]
+      );
+
+      const token = jwt.sign({ id: existingUser.id, role: 'user' }, JWT_SECRET, { expiresIn: '7d' });
+      return res.status(200).json({
+        message: 'Signup successful!',
+        token,
+        user: { id: existingUser.id, email, name: fullName, role: 'user' }
+      });
     }
 
     const [result] = await pool.execute(
       'INSERT INTO users (name, email, password, charity_id, charity_contribution_pct, status, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [`${first_name} ${last_name}`, email, password, charity_id || null, charity_contribution_pct || 10, 'Active', 'user']
+      [fullName, email, password, charity_id || null, charity_contribution_pct || 10, 'Active', 'user']
     );
 
     const userId = result.insertId;
@@ -277,10 +293,10 @@ app.post('/api/auth/signup', async (req, res) => {
 
     console.log(`✅ User ${email} registered and activated immediately.`);
 
-    res.status(201).json({ 
+    return res.status(201).json({ 
       message: 'Signup successful!', 
       token, 
-      user: { id: userId, email, name: `${first_name} ${last_name}`, role: 'user' } 
+      user: { id: userId, email, name: fullName, role: 'user' } 
     });
 
     // Do not await the mail sending so the HTTP request doesn't hang if SMTP times out
@@ -394,9 +410,17 @@ app.post('/api/auth/login', async (req, res) => {
     );
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
 
-    const user = rows[0];
-    if (user.status === 'Pending') {
+    let user = rows[0];
+    if (user.role === 'admin' && user.status === 'Pending') {
       return res.status(403).json({ error: 'Please verify your email first. Check your inbox.' });
+    }
+
+    if (user.role !== 'admin' && user.status === 'Pending') {
+      await pool.execute(
+        'UPDATE users SET status = "Active", otp_code = NULL, otp_expiry = NULL WHERE id = ?',
+        [user.id]
+      );
+      user = { ...user, status: 'Active' };
     }
 
     const token = jwt.sign({ id: user.id, role: user.role || 'user' }, JWT_SECRET, { expiresIn: '7d' });
